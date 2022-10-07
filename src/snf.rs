@@ -5,9 +5,9 @@
 use nalgebra::{DMatrix, DMatrixSlice};
 
 pub struct Decomposed {
-    p: DMatrix<i128>,
-    q: DMatrix<i128>,
-    b: DMatrix<i128>,
+    pub p: DMatrix<i128>,
+    pub q: DMatrix<i128>,
+    pub b: DMatrix<i128>,
 }
 
 fn iamin_full(m: DMatrixSlice<i128>) -> (usize, usize) {
