@@ -1,6 +1,5 @@
 use nalgebra::{DMatrix, DVector};
 use crate::snf::{smith_normalize};
-
 pub struct SimplicalComplex {
     verts: Vec<Vec<usize>>,
     edges: Vec<Vec<usize>>,
@@ -52,24 +51,35 @@ fn calc_boundary_operators(sc: SimplicalComplex) -> (DMatrix<isize>, DMatrix<isi
     (d1, d2)
 }
 
-fn col_r(){
-    unimplemented!();
+fn col_r(mut m: DMatrix<isize>){
+    (nr, nc) = m.shape();
+    if nr * nc { return; }
+    for j1 in 0..nc {
+        let i = 1;
+        for j2 in 0..nr {
+            if j2 == j1 { continue; }
+            //let c = 
+        }
+    }
 }
 
-fn col_r_same_tor(){
-    unimplemented!();
+fn col_r_same_tor(mut m: DMatrix<isize>, tortion: DMatrix<isize>){
+
 }
 
-fn calc_cohomology(d: DMatrix<isize>) -> () {
+fn calc_cohomology(d: DMatrix<isize>) -> usize {
     let r = d.clone().cast::<f64>().rank(1e-8);
     let o = smith_normalize(&d.cast::<i128>());
-    let u = o.p.cast::<f64>().try_inverse().unwrap();
-    let z = o.q;
-    let t  = o.b.diagonal();
-    ()
+    println!("invU: {}", o.p);
+    println!("S: {}", o.b);
+    println!("V: {}", o.q);
+    //let u = o.p.cast::<f64>().try_inverse().unwrap();
+    //let z = o.q;
+    //let t  = o.b.diagonal();
+    1
 }
 
-fn calc_ith_homology(d1: DMatrix<isize>, d2: DMatrix<isize>){
+fn calc_ith_homology(d1: DMatrix<isize>, d2: DMatrix<isize>) -> DMatrix<isize>{
     let mut z1 = DMatrix::<isize>::identity(d1.ncols(), d1.ncols());
     let mut b0 = DMatrix::<isize>::zeros(1, 1);
     let mut t0 = DMatrix::<isize>::zeros(1, 1);
@@ -78,13 +88,21 @@ fn calc_ith_homology(d1: DMatrix<isize>, d2: DMatrix<isize>){
     if !is_zeros(&d1) {
         let set = calc_cohomology(d1);
     }
-    if d2.is_empty() {
+    if !d2.is_empty() {
         let set = calc_cohomology(d2);
     }
+    DMatrix::<isize>::zeros(1, 1)
 }
 
 pub fn calc_homology_group_list(sc: SimplicalComplex) {
     let boundaries = calc_boundary_operators(sc);
+    let mut homology_groups = vec![];
+    let da = DMatrix::from_row_slice(3, 1, &[0,0,0]);
+    let db = DMatrix::from_element(0, 0, 0);
+    //print!("da:{}, b0: {}", da, boundaries.0);
+    //homology_groups.push(calc_ith_homology(da, boundaries.0));
+    //print!("b1:{}, db: {}", boundaries.0, db);
+    homology_groups.push(calc_ith_homology(boundaries.0, db));
 
 }
 
