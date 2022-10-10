@@ -51,48 +51,48 @@ fn calc_boundary_operators(sc: SimplicalComplex) -> (DMatrix<isize>, DMatrix<isi
     (d1, d2)
 }
 
-fn col_r(m: DMatrix<i128>) -> DMatrix<i128>{
+fn col_r(mm: DMatrix<i128>) -> DMatrix<i128>{
+    let mut m = mm.clone(); 
     let (nr, nc) = m.shape();
     if nr * nc == 0 { return m; }
     for j1 in 0..nc {
         let mt = m.transpose();
-        let v = vec![];
-        'l: for ii in 0..mt.nrows() {
-            for jj in 0..mt.ncols() {
-                if m[(ii, jj)] != 0 {
-                    v.push(ii);
-                    break 'l;
-                }
-            }
-        }
+        let v = np_map(&m);
         let i = v[j1];
-        for j2 in 0..nr {
+        for j2 in 0..nc {
             if j2 == j1 { continue; }
-            let c = m([i, j2]).sign() * (m([i, j2]) / m([i, j1]));
-            m.set_column(j2, m.row(j2) - c * m[j1]);
+            let n = m[(i, j2)];
+            let c = (n / n.abs()) * (m[(i, j2)] / m[(i, j1)]);
+            println!("c: {}", c);
+            let o = m.row(j2) - m.row(j1) * c;
+            m.set_column(j2, &o.transpose());
         }
     }
+    println!("{}", m);
     m
 }
 
-fn col_r_same_tor(mut m: DMatrix<isize>, tortion: DMatrix<isize>){
-
+fn col_r_same_tor(mut m: DMatrix<f64>)-> (DMatrix<i128>, DMatrix<i128>){
+    let (nr, nc) = m.shape();
+    let a = DMatrix::<i128>::zeros(nr, nc);
+    let b = DMatrix::<i128>::zeros(nr, nc);
+    (a, b)
 }
 
-fn calc_cohomology(d: DMatrix<isize>) -> (DMatrix<isize>, DMatrix<isize>, DMatrix<isize>) {
+fn calc_cohomology(d: DMatrix<isize>) -> (DMatrix<i128>, DMatrix<i128>, DMatrix<i128>) {
     let r = d.clone().cast::<f64>().rank(1e-8);
     let o = smith_normalize(&d.cast::<i128>());
     let u = o.p.cast::<f64>().try_inverse().unwrap();
     let z = o.q.slice((0, r), (o.q.nrows(), o.q.ncols() - r)).clone();
     let t = o.b.slice((0, 0), (r, r)).clone().diagonal().clone();
-    let b = u.slice((0, 0), (u.nrows(), r)).clone();
-    println!("U: {}", u);
-    println!("Z: {}", z);
-    println!("T: {}", t);
-    println!("B: {}", b);
-    let z = col_r(z);
-    let (b, t) = col_r_same_tor(b, t);
-    (b, t, z)
+    let b = u.slice((0, 0), (u.nrows(), r)).clone_owned();
+    //println!("U: {}", u);
+    //println!("Z: {}", z);
+    //println!("T: {}", t);
+    //println!("B: {}", b);
+    let zz = col_r(z.into_owned());
+    let (bb, tt) = col_r_same_tor(b);
+    (bb, tt, zz)
 }
 
 fn calc_ith_homology(d1: DMatrix<isize>, d2: DMatrix<isize>) -> DMatrix<isize>{
@@ -147,6 +147,28 @@ fn is_zeros(m: &DMatrix<isize>) -> bool {
     true
 }
 
-fn np_map(d: DMatrix<isize>) -> Vec<isize> {
-
+fn np_map(d: &DMatrix<i128>) -> Vec<usize> {
+    let mut v = vec![];
+    for i in 0..d.nrows() {
+    for j in 0..d.ncols() {
+        if d[(i, j)] != 0 { v.push(j); break; }
+    }
+    }
+    v
 }
+
+/*
+#[test]
+fn aaa() {
+    let a = DMatrix::from_row_slice(3, 3, &[
+        0, 0, 1,
+        0, 1, 0,
+        1, 0, 0,
+    ]);
+    let ve = np_map(&a);
+    for v in ve {
+        print!("{}, ", v);
+    }
+    println!("");
+}
+*/
