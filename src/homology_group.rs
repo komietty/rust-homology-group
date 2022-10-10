@@ -1,4 +1,4 @@
-use nalgebra::{DMatrix, DVector};
+use nalgebra::{DMatrix, DVector, DMatrixSlice};
 use crate::snf::{smith_normalize};
 pub struct SimplicalComplex {
     verts: Vec<Vec<usize>>,
@@ -51,32 +51,48 @@ fn calc_boundary_operators(sc: SimplicalComplex) -> (DMatrix<isize>, DMatrix<isi
     (d1, d2)
 }
 
-fn col_r(mut m: DMatrix<isize>){
-    (nr, nc) = m.shape();
-    if nr * nc { return; }
+fn col_r(m: DMatrix<i128>) -> DMatrix<i128>{
+    let (nr, nc) = m.shape();
+    if nr * nc == 0 { return m; }
     for j1 in 0..nc {
-        let i = 1;
+        let mt = m.transpose();
+        let v = vec![];
+        'l: for ii in 0..mt.nrows() {
+            for jj in 0..mt.ncols() {
+                if m[(ii, jj)] != 0 {
+                    v.push(ii);
+                    break 'l;
+                }
+            }
+        }
+        let i = v[j1];
         for j2 in 0..nr {
             if j2 == j1 { continue; }
-            //let c = 
+            let c = m([i, j2]).sign() * (m([i, j2]) / m([i, j1]));
+            m.set_column(j2, m.row(j2) - c * m[j1]);
         }
     }
+    m
 }
 
 fn col_r_same_tor(mut m: DMatrix<isize>, tortion: DMatrix<isize>){
 
 }
 
-fn calc_cohomology(d: DMatrix<isize>) -> usize {
+fn calc_cohomology(d: DMatrix<isize>) -> (DMatrix<isize>, DMatrix<isize>, DMatrix<isize>) {
     let r = d.clone().cast::<f64>().rank(1e-8);
     let o = smith_normalize(&d.cast::<i128>());
-    println!("invU: {}", o.p);
-    println!("S: {}", o.b);
-    println!("V: {}", o.q);
-    //let u = o.p.cast::<f64>().try_inverse().unwrap();
-    //let z = o.q;
-    //let t  = o.b.diagonal();
-    1
+    let u = o.p.cast::<f64>().try_inverse().unwrap();
+    let z = o.q.slice((0, r), (o.q.nrows(), o.q.ncols() - r)).clone();
+    let t = o.b.slice((0, 0), (r, r)).clone().diagonal().clone();
+    let b = u.slice((0, 0), (u.nrows(), r)).clone();
+    println!("U: {}", u);
+    println!("Z: {}", z);
+    println!("T: {}", t);
+    println!("B: {}", b);
+    let z = col_r(z);
+    let (b, t) = col_r_same_tor(b, t);
+    (b, t, z)
 }
 
 fn calc_ith_homology(d1: DMatrix<isize>, d2: DMatrix<isize>) -> DMatrix<isize>{
@@ -91,6 +107,8 @@ fn calc_ith_homology(d1: DMatrix<isize>, d2: DMatrix<isize>) -> DMatrix<isize>{
     if !d2.is_empty() {
         let set = calc_cohomology(d2);
     }
+    //let z_nonzero = list(map(lambda z:np.where(z!=0)[0][0],Z1.T))
+    //let b_nonzero = list(map(lambda z:np.where(z!=0)[0][0],B1.T))
     DMatrix::<isize>::zeros(1, 1)
 }
 
@@ -127,4 +145,8 @@ fn is_zeros(m: &DMatrix<isize>) -> bool {
         }
     }
     true
+}
+
+fn np_map(d: DMatrix<isize>) -> Vec<isize> {
+
 }
