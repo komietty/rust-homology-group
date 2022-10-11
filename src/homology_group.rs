@@ -7,7 +7,7 @@ pub struct SimplicalComplex {
     faces: Vec<Vec<usize>>,
 }
 
-fn perm_sgn(l1: &Vec<usize>, l2: &Vec<usize>, l: usize) -> isize {
+fn perm_sign(l1: &Vec<usize>, l2: &Vec<usize>, l: usize) -> isize {
     match l {
         2 => { return if l1[0] == l2[0] { 1 } else { -1 } },
         3 => {
@@ -31,7 +31,7 @@ fn simplex_boundary(s: &Vec<usize>, c1: &Vec<Vec<usize>>) -> DVector<isize>{
             let f2 = s.iter().all(|v| sb.contains(v));
             if f1 && f2 { id = j; }
         }
-        chain[id] = (-1_isize).pow(i as u32) * perm_sgn(&c1[id], &sb, sb.len());
+        chain[id] = (-1_isize).pow(i as u32) * perm_sign(&c1[id], &sb, sb.len());
     }
     chain
 }
@@ -69,7 +69,7 @@ fn col_r(mm: DMatrix<i128>) -> DMatrix<i128>{
 }
 type TMatrix = OMatrix<i128, Dynamic, U1>;
 
-fn col_r_same_tor(mut mm: DMatrix<i128>, tt: TMatrix)-> (DMatrix<i128>, TMatrix){
+fn col_r_same_tor(mut mm: DMatrix<i128>, tt: TMatrix) -> (DMatrix<i128>, TMatrix){
     let mut m = mm.clone(); 
     let mut t = tt.clone();
     let (nr, nc) = m.shape();
@@ -95,26 +95,17 @@ fn calc_cohomology(d: DMatrix<isize>) -> (DMatrix<i128>, TMatrix, DMatrix<i128>)
     let z = o.q.slice((0, r), (o.q.nrows(), o.q.ncols() - r)).clone();
     let b = u.slice((0, 0), (u.nrows(), r)).clone_owned();
     let t = o.b.slice((0, 0), (r, r)).clone().diagonal().clone();
-    //println!("U: {}", u);
-    //println!("B: {}", b);
-    //println!("Z: {}", z);
-    //println!("--------");
-    //println!("T: {}", t);
     let zz = col_r(z.into_owned());
     let (bb, tt) = col_r_same_tor(cast_f2i(b), t);
     (bb, tt, zz)
 }
 
 fn calc_ith_homology(d1: DMatrix<isize>, d2: DMatrix<isize>) -> (DMatrix<i128>, Vec<i128>){
-    //println!("d1: {}", d1.clone());
     let mut z1 = DMatrix::<i128>::identity(d1.ncols(), d1.ncols());
-    let mut b0 = DMatrix::<i128>::zeros(1, 1);
-    let mut t0 = DMatrix::<i128>::zeros(1, 1);
     let mut b1 = DMatrix::<i128>::zeros(1, 1);
     let mut t1 = TMatrix::from_row_slice(&[]);
     if !is_zeros(&d1) {
         let set = calc_cohomology(d1);
-        b0 = set.0;
         z1 = set.2;
     }
 
@@ -128,8 +119,6 @@ fn calc_ith_homology(d1: DMatrix<isize>, d2: DMatrix<isize>) -> (DMatrix<i128>, 
     let z_nonzero = np_map(&z1.transpose());
     let b_nonzero = np_map(&b1.transpose()); 
     let mut non_trivial = vec![];
-    //for v in z_nonzero { println!("znonzero: {}", v); }
-    //for v in b_nonzero { println!("bnonzero: {}", v); }
 
     for (i, z) in z_nonzero.clone().iter().enumerate() { 
         if !b_nonzero.contains(z) {
@@ -139,40 +128,38 @@ fn calc_ith_homology(d1: DMatrix<isize>, d2: DMatrix<isize>) -> (DMatrix<i128>, 
 
     for (i, b) in b_nonzero.iter().enumerate() { 
         if t1[(i, 0)] > 1 {
-            non_trivial.push((z_nonzero.clone().into_iter().find(|z| z == b).unwrap(), t1[i]));
+            let mut basis = 0;
+            for (j, z) in z_nonzero.clone().iter().enumerate() {
+                if z == b { basis = j; break; }
+            }
+            non_trivial.push((basis, t1[(i, 0)]));
         }
     }
-    //println!("z1: {}", z1);
-    //println!("b1: {}", b1);
 
-    //print!("nt:");
-    //for k in non_trivial.clone() { print!("({}, {})", k.0, k.1); }
-    //println!("");
-
-    let mut zz = DMatrix::<i128>::zeros( z1.nrows(), non_trivial.len());
+    let mut zz = DMatrix::<i128>::zeros(z1.nrows(), non_trivial.len());
     let mut tt = vec![];
     for (i, x) in non_trivial.iter().enumerate() {
         zz.set_column(i, &z1.column(x.0));
         tt.push(x.1);
     };
 
+    println!("-----");
     println!("zz: {}", zz);
-    //print!("z1: {}", z1);
     print!("k: ");
     for k in tt.clone() { print!("{}, ", k); }
-    println!();
+    println!("");
     println!("-----");
 
     (zz, tt)
 }
 
-pub fn calc_homology_group_list(sc: SimplicalComplex) {
+pub fn calc_homology_group_list(sc: SimplicalComplex) -> Vec<(DMatrix<i128>, Vec<i128>)>{
     let (d0, d1, d2, d3) = calc_boundary_operators(sc);
-    let mut homology_groups = vec![];
-    homology_groups.push(calc_ith_homology(d0.clone(), d1.clone()));
-    homology_groups.push(calc_ith_homology(d1.clone(), d2.clone()));
-    homology_groups.push(calc_ith_homology(d2.clone(), d3.clone()));
-
+    let mut g = vec![];
+    g.push(calc_ith_homology(d0.clone(), d1.clone()));
+    g.push(calc_ith_homology(d1.clone(), d2.clone()));
+    g.push(calc_ith_homology(d2.clone(), d3.clone()));
+    g
 }
 
 #[test]
@@ -182,20 +169,17 @@ fn test() {
         edges: vec![vec![0, 1], vec![1, 2], vec![2, 0]],
         faces: vec![vec![0, 1, 2]],
     };
-    calc_homology_group_list(sc);
+    let rs = calc_homology_group_list(sc);
 }
 
 #[test]
 fn test_2() {
     let sc = SimplicalComplex{
         verts: vec![vec![0], vec![1], vec![2], vec![3]],
-        edges: vec![
-            vec![0, 1], vec![0, 2], vec![0, 3],
-            vec![1, 2], vec![1, 3], vec![2, 3],
-            ],
+        edges: vec![vec![0, 1], vec![0, 2], vec![0, 3], vec![1, 2], vec![1, 3], vec![2, 3]],
         faces: vec![vec![0, 1, 2], vec![0, 1, 3], vec![0, 2, 3], vec![1, 2, 3]],
     };
-    calc_homology_group_list(sc);
+    let rs = calc_homology_group_list(sc);
 }
 
 #[test]
@@ -223,6 +207,7 @@ fn test_3() {
             vec![1, 4],
             vec![1, 5],
             vec![1, 7],
+            vec![1, 8],
             vec![2, 3],
             vec![2, 5],
             vec![2, 6],
@@ -289,6 +274,7 @@ fn test_4() {
             vec![1, 5],
             vec![1, 6],
             vec![1, 7],
+            vec![1, 8],
             vec![2, 3],
             vec![2, 4],
             vec![2, 5],
@@ -367,19 +353,3 @@ fn sign(i:i128)-> i128 {
     if i == 0 { return 0; }
     else { return i / i.abs(); }
 }
-
-/*
-#[test]
-fn aaa() {
-    let a = DMatrix::from_row_slice(3, 3, &[
-        0, 0, 1,
-        0, 1, 0,
-        1, 0, 0,
-    ]);
-    let ve = np_map(&a);
-    for v in ve {
-        print!("{}, ", v);
-    }
-    println!("");
-}
-*/
