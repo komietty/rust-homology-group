@@ -12,7 +12,6 @@ pub struct Decomposed {
 }
 
 fn iamin_full(m: DMatrixSlice<i128>) -> (usize, usize) {
-    assert!(!m.is_empty(), "The input matrix must not be empty.");
     let mut min = unsafe { m.get_unchecked((0, 0)).abs() };
     let mut idx = (0, 0);
     for j in 0..m.ncols() {
@@ -25,19 +24,6 @@ fn iamin_full(m: DMatrixSlice<i128>) -> (usize, usize) {
         }
     }
     idx
-}
-
-fn is_zeros(m: DMatrixSlice<i128>) -> bool {
-    let (nr, nc) = m.shape();
-    for j in 0..nc {
-        for i in 0..nr {
-            let e = unsafe { m.get_unchecked((i, j)) };
-            if *e != 0 {
-                return false;
-            }
-        }
-    }
-    true
 }
 
 fn is_mod_zeros(m: DMatrixSlice<i128>, v: i128) -> bool {
@@ -101,7 +87,6 @@ fn col_null(a: &IM, k: usize) -> Decomposed {
 }
 
 fn mod_full(m: DMatrixSlice<i128>, val: i128) -> (usize, usize) {
-    assert!(!m.is_empty(), "The input matrix must not be empty.");
     let mut idx = (0, 0);
     'l: for j in 0..m.ncols() {
         for i in 0..m.nrows() {
@@ -147,22 +132,23 @@ fn remn_mod(a: &IM, k: usize) -> Decomposed {
 }
 
 pub fn smith_normalize(a: &IM) -> Decomposed {
+    let iszeros = |m: DMatrixSlice<i128>| m.iter().all(|v| *v == 0);
     let (nr, nc) = a.shape();
     let mut b = a.clone();
     let mut p = IM::identity(nr, nr);
     let mut q = IM::identity(nc, nc);
     for k in 0..if nr < nc { nr } else { nc } {
-        if is_zeros(b.slice((k, k), (nr - k, nc - k))) {
+        if iszeros(b.slice((k, k), (nr - k, nc - k))) {
             break;
         }
         loop {
             let d1 = swap_min(&b, k);
             let d2 = row_null(&d1.b, k);
             (p, q) = (&d2.p * &d1.p * &p, &q * &d1.q * &d2.q);
-            if is_zeros(d2.b.slice((k + 1, k), (nr - k - 1, 1))) {
+            if iszeros(d2.b.slice((k + 1, k), (nr - k - 1, 1))) {
                 let d3 = col_null(&d2.b, k);
                 (p, q) = (&d3.p * &p, &q * &d3.q);
-                if is_zeros(d3.b.slice((k, k + 1), (1, nc - k - 1))) {
+                if iszeros(d3.b.slice((k, k + 1), (1, nc - k - 1))) {
                     if is_mod_zeros(
                         d3.b.slice((k + 1, k + 1), (nr - k - 1, nc - k - 1)),
                         d3.b[(k, k)],
