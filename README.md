@@ -1,4 +1,4 @@
-# smith-normal-form
+# rust-homology-group 
 
 A tiny module for finding homology group and its bases.
 
