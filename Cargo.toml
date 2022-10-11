@@ -1,5 +1,5 @@
 [package]
-name = "smith-normal-form"
+name = "rust-homology-group"
 version = "0.1.0"
 edition = "2021"
 

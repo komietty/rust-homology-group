@@ -1,9 +1,9 @@
 //
 // instead of cor opatation with torsion, rref might be simpler 
 //
-use nalgebra::{DMatrix, DVector, DMatrixSlice, U1, Dynamic, OMatrix};
 use num::integer::gcd;
-use crate::snf::{smith_normalize};
+use nalgebra::{DMatrix, DVector, DMatrixSlice, U1, Dynamic, OMatrix};
+use crate::smith_normal_form::{smith_normalize};
 
 type TM = OMatrix<i128, Dynamic, U1>;
 type IM = OMatrix<i128, Dynamic, Dynamic>;
