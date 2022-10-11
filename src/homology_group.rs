@@ -17,7 +17,6 @@ fn perm_sgn(l1: &Vec<usize>, l2: &Vec<usize>, l: usize) -> isize {
              return if f1 || f2 || f3 { 1 } else { -1 }
         }
         _ => 1
-        
     }
 }
 
@@ -46,10 +45,12 @@ fn calc_ith_boundary(c1:&Vec<Vec<usize>>, c2:&Vec<Vec<usize>>) -> DMatrix<isize>
     d.transpose()
 }
 
-fn calc_boundary_operators(sc: SimplicalComplex) -> (DMatrix<isize>, DMatrix<isize>){
+fn calc_boundary_operators(sc: SimplicalComplex) -> (DMatrix<isize>, DMatrix<isize>, DMatrix<isize>, DMatrix<isize>){
+    let d0 = DMatrix::<isize>::zeros(1, sc.verts.len());
     let d1 = calc_ith_boundary(&sc.verts, &sc.edges);
     let d2 = calc_ith_boundary(&sc.edges, &sc.faces);
-    (d1, d2)
+    let d3 = DMatrix::<isize>::from_element(0, 0, 0);
+    (d0, d1, d2, d3)
 }
 
 fn col_r(mm: DMatrix<i128>) -> DMatrix<i128>{
@@ -92,64 +93,85 @@ fn calc_cohomology(d: DMatrix<isize>) -> (DMatrix<i128>, TMatrix, DMatrix<i128>)
     let o = smith_normalize(&d.cast::<i128>());
     let u = o.p.cast::<f64>().try_inverse().unwrap();
     let z = o.q.slice((0, r), (o.q.nrows(), o.q.ncols() - r)).clone();
-    let t = o.b.slice((0, 0), (r, r)).clone().diagonal().clone();
     let b = u.slice((0, 0), (u.nrows(), r)).clone_owned();
+    let t = o.b.slice((0, 0), (r, r)).clone().diagonal().clone();
     //println!("U: {}", u);
-    //println!("Z: {}", z);
-    //println!("T: {}", t);
     //println!("B: {}", b);
+    //println!("Z: {}", z);
+    //println!("--------");
+    //println!("T: {}", t);
     let zz = col_r(z.into_owned());
     let (bb, tt) = col_r_same_tor(cast_f2i(b), t);
     (bb, tt, zz)
 }
 
-fn calc_ith_homology(d1: DMatrix<isize>, d2: DMatrix<isize>) -> DMatrix<isize>{
-    println!("d1: {}", d1.clone());
+fn calc_ith_homology(d1: DMatrix<isize>, d2: DMatrix<isize>) -> (DMatrix<i128>, Vec<i128>){
+    //println!("d1: {}", d1.clone());
     let mut z1 = DMatrix::<i128>::identity(d1.ncols(), d1.ncols());
     let mut b0 = DMatrix::<i128>::zeros(1, 1);
     let mut t0 = DMatrix::<i128>::zeros(1, 1);
     let mut b1 = DMatrix::<i128>::zeros(1, 1);
-    let mut t1 = DMatrix::<i128>::zeros(1, 1);
+    let mut t1 = TMatrix::from_row_slice(&[]);
     if !is_zeros(&d1) {
         let set = calc_cohomology(d1);
         b0 = set.0;
         z1 = set.2;
     }
-    if !d2.is_empty() {
+
+    if d2.is_empty() {
+        b1 = DMatrix::<i128>::from_element(0, 0, 0);
+    } else {
         let set = calc_cohomology(d2);
         b1 = set.0;
+        t1 = set.1;
     }
     let z_nonzero = np_map(&z1.transpose());
     let b_nonzero = np_map(&b1.transpose()); 
     let mut non_trivial = vec![];
-    println!("z1: {}", z1);
-    println!("b1: {}", b1);
     //for v in z_nonzero { println!("znonzero: {}", v); }
     //for v in b_nonzero { println!("bnonzero: {}", v); }
 
-    for (i, z) in z_nonzero.iter().enumerate() { 
+    for (i, z) in z_nonzero.clone().iter().enumerate() { 
         if !b_nonzero.contains(z) {
             non_trivial.push((i, 1));
         }
     }
 
     for (i, b) in b_nonzero.iter().enumerate() { 
-        if t1[i] > 1 {
-            non_trivial.push((i, 1));
+        if t1[(i, 0)] > 1 {
+            non_trivial.push((z_nonzero.clone().into_iter().find(|z| z == b).unwrap(), t1[i]));
         }
     }
-    DMatrix::<isize>::zeros(1, 1)
+    //println!("z1: {}", z1);
+    //println!("b1: {}", b1);
+
+    //print!("nt:");
+    //for k in non_trivial.clone() { print!("({}, {})", k.0, k.1); }
+    //println!("");
+
+    let mut zz = DMatrix::<i128>::zeros( z1.nrows(), non_trivial.len());
+    let mut tt = vec![];
+    for (i, x) in non_trivial.iter().enumerate() {
+        zz.set_column(i, &z1.column(x.0));
+        tt.push(x.1);
+    };
+
+    println!("zz: {}", zz);
+    //print!("z1: {}", z1);
+    print!("k: ");
+    for k in tt.clone() { print!("{}, ", k); }
+    println!();
+    println!("-----");
+
+    (zz, tt)
 }
 
 pub fn calc_homology_group_list(sc: SimplicalComplex) {
-    let boundaries = calc_boundary_operators(sc);
+    let (d0, d1, d2, d3) = calc_boundary_operators(sc);
     let mut homology_groups = vec![];
-    let da = DMatrix::from_row_slice(1, 3, &[0,0,0]);
-    let db = DMatrix::from_element(0, 0, 0);
-    //print!("da:{}, b0: {}", da, boundaries.0);
-    //print!("b1:{}, db: {}", boundaries.0, db);
-    homology_groups.push(calc_ith_homology(da, boundaries.0.clone()));
-    homology_groups.push(calc_ith_homology(boundaries.0.clone(), db));
+    homology_groups.push(calc_ith_homology(d0.clone(), d1.clone()));
+    homology_groups.push(calc_ith_homology(d1.clone(), d2.clone()));
+    homology_groups.push(calc_ith_homology(d2.clone(), d3.clone()));
 
 }
 
@@ -159,6 +181,151 @@ fn test() {
         verts: vec![vec![0], vec![1], vec![2]],
         edges: vec![vec![0, 1], vec![1, 2], vec![2, 0]],
         faces: vec![vec![0, 1, 2]],
+    };
+    calc_homology_group_list(sc);
+}
+
+#[test]
+fn test_2() {
+    let sc = SimplicalComplex{
+        verts: vec![vec![0], vec![1], vec![2], vec![3]],
+        edges: vec![
+            vec![0, 1], vec![0, 2], vec![0, 3],
+            vec![1, 2], vec![1, 3], vec![2, 3],
+            ],
+        faces: vec![vec![0, 1, 2], vec![0, 1, 3], vec![0, 2, 3], vec![1, 2, 3]],
+    };
+    calc_homology_group_list(sc);
+}
+
+#[test]
+fn test_3() {
+    let sc = SimplicalComplex{
+        verts: vec![
+            vec![0],
+            vec![1],
+            vec![2],
+            vec![3],
+            vec![4],
+            vec![5],
+            vec![6],
+            vec![7],
+            vec![8],
+            ],
+        edges: vec![
+            vec![0, 1],
+            vec![0, 2],
+            vec![0, 3],
+            vec![0, 4],
+            vec![0, 6],
+            vec![0, 7],
+            vec![1, 2],
+            vec![1, 4],
+            vec![1, 5],
+            vec![1, 7],
+            vec![2, 3],
+            vec![2, 5],
+            vec![2, 6],
+            vec![2, 8],
+            vec![3, 4],
+            vec![3, 5],
+            vec![3, 7],
+            vec![3, 8],
+            vec![4, 5],
+            vec![4, 6],
+            vec![4, 8],
+            vec![5, 6],
+            vec![5, 7],
+            vec![6, 7],
+            vec![6, 8],
+            vec![7, 8],
+            ],
+        faces: vec![
+            vec![0, 1, 4],
+            vec![1, 4, 5],
+            vec![1, 2, 5],
+            vec![2, 5, 6],
+            vec![0, 6, 2],
+            vec![0, 6, 4],
+            vec![3, 4, 5],
+            vec![3, 7, 5],
+            vec![5, 6, 7],
+            vec![6, 7, 8],
+            vec![4, 8, 6],
+            vec![3, 4, 8],
+            vec![0, 3, 7],
+            vec![0, 1, 7],
+            vec![1, 7, 8],
+            vec![1, 2, 8],
+            vec![2, 8, 3],
+            vec![0, 3, 2]
+        ],
+    };
+    calc_homology_group_list(sc);
+}
+
+#[test]
+fn test_4() {
+    let sc = SimplicalComplex{
+        verts: vec![
+            vec![0],
+            vec![1],
+            vec![2],
+            vec![3],
+            vec![4],
+            vec![5],
+            vec![6],
+            vec![7],
+            vec![8],
+            ],
+        edges: vec![
+            vec![0, 1],
+            vec![0, 2],
+            vec![0, 3],
+            vec![0, 4],
+            vec![0, 6],
+            vec![0, 7],
+            vec![1, 2],
+            vec![1, 5],
+            vec![1, 6],
+            vec![1, 7],
+            vec![2, 3],
+            vec![2, 4],
+            vec![2, 5],
+            vec![2, 8],
+            vec![3, 4],
+            vec![3, 5],
+            vec![3, 7],
+            vec![3, 8],
+            vec![4, 5],
+            vec![4, 6],
+            vec![4, 8],
+            vec![5, 6],
+            vec![5, 7],
+            vec![6, 7],
+            vec![6, 8],
+            vec![7, 8],
+            ],
+        faces: vec![
+            vec![0, 4, 2],
+            vec![2, 4, 5],
+            vec![1, 2, 5],
+            vec![1, 5, 6],
+            vec![0, 1, 6],
+            vec![0, 6, 4],
+            vec![3, 5, 4],
+            vec![3, 7, 5],
+            vec![5, 7, 6],
+            vec![6, 7, 8],
+            vec![4, 6, 8],
+            vec![3, 4, 8],
+            vec![0, 7, 3],
+            vec![0, 1, 7],
+            vec![1, 8, 7],
+            vec![1, 2, 8],
+            vec![2, 3, 8],
+            vec![0, 3, 2]
+        ],
     };
     calc_homology_group_list(sc);
 }
