@@ -1,2 +1,2 @@
 mod snf;
-mod homology_group;
+mod homology;

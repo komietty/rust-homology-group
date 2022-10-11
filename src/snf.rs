@@ -12,7 +12,6 @@ pub struct Decomposed {
 }
 
 fn iamin_full(m: DMatrixSlice<i128>) -> (usize, usize) {
-    assert!(!m.is_empty(), "The input matrix must not be empty.");
     let mut min = unsafe { m.get_unchecked((0, 0)).abs() };
     let mut idx = (0, 0);
     for j in 0..m.ncols() {
@@ -88,7 +87,6 @@ fn col_null(a: &IM, k: usize) -> Decomposed {
 }
 
 fn mod_full(m: DMatrixSlice<i128>, val: i128) -> (usize, usize) {
-    assert!(!m.is_empty(), "The input matrix must not be empty.");
     let mut idx = (0, 0);
     'l: for j in 0..m.ncols() {
         for i in 0..m.nrows() {
@@ -134,7 +132,7 @@ fn remn_mod(a: &IM, k: usize) -> Decomposed {
 }
 
 pub fn smith_normalize(a: &IM) -> Decomposed {
-    let iszeros    = |m: DMatrixSlice<i128>| m.iter().all(|v| *v == 0);
+    let iszeros = |m: DMatrixSlice<i128>| m.iter().all(|v| *v == 0);
     let (nr, nc) = a.shape();
     let mut b = a.clone();
     let mut p = IM::identity(nr, nr);
