@@ -1,6 +1,6 @@
 # rust-homology-group 
 
-A tiny module for finding homology group and its bases.
+A tiny module for finding homology group and its basis.
 
 It also has Smith normal form ([SNF](https://en.wikipedia.org/wiki/Smith_normal_form)) module usable independently.
 
