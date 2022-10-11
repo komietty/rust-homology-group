@@ -1,8 +1,10 @@
+//
 // instead of cor opatation with torsion, rref might be simpler 
-
+//
 use nalgebra::{DMatrix, DVector, DMatrixSlice, U1, Dynamic, OMatrix};
 use num::integer::gcd;
 use crate::snf::{smith_normalize};
+
 pub struct SimplicalComplex {
     verts: Vec<Vec<usize>>,
     edges: Vec<Vec<usize>>,
@@ -12,8 +14,8 @@ type TM = OMatrix<i128, Dynamic, U1>;
 type IM = OMatrix<i128, Dynamic, Dynamic>;
 type IV = DVector<i128>;
 
-fn perm_sign(l1: &Vec<usize>, l2: &Vec<usize>, l: usize) -> i128 {
-    match l {
+fn perm_sign(l1: &Vec<usize>, l2: &Vec<usize>) -> i128 {
+    match l2.len() {
         2 => { return if l1[0] == l2[0] { 1 } else { -1 } },
         3 => {
              let f1 = l1[0] == l2[0] && l1[1] == l2[1] && l1[2] == l2[2];
@@ -26,7 +28,7 @@ fn perm_sign(l1: &Vec<usize>, l2: &Vec<usize>, l: usize) -> i128 {
 }
 
 fn simplex_boundary(s: &Vec<usize>, c: &Vec<Vec<usize>>) -> IV {
-    let mut chain = IV::zeros(c.len());
+    let mut b = IV::zeros(c.len());
     for i in 0..s.len() {
         let mut sb = vec![];
         let mut id = 0;
@@ -34,150 +36,138 @@ fn simplex_boundary(s: &Vec<usize>, c: &Vec<Vec<usize>>) -> IV {
         for (j, s) in c.iter().enumerate() {
             let f1 = sb.len() == s.len();
             let f2 = s.iter().all(|v| sb.contains(v));
-            if f1 && f2 { id = j; }
+            if f1 && f2 { id = j; break; }
         }
-        chain[id] = (-1_i128).pow(i as u32) * perm_sign(&c[id], &sb, sb.len());
+        b[id] = (-1_i128).pow(i as u32) * perm_sign(&c[id], &sb);
     }
-    chain
+    b
 }
 
-fn calc_ith_boundary(c1:&Vec<Vec<usize>>, c2:&Vec<Vec<usize>>) -> IM {
-    let mut d = IM::zeros(c2.len(), c1.len());
+fn calc_boundary_operator(c1:&Vec<Vec<usize>>, c2:&Vec<Vec<usize>>) -> IM {
+    let mut m = IM::zeros(c2.len(), c1.len());
     for (j, s) in c2.iter().enumerate() {
-        let b = simplex_boundary(&s, c1);
-        d.set_row(j, &b.transpose());
+        m.set_row(j, &simplex_boundary(&s, c1).transpose());
     }
-    d.transpose()
+    m.transpose()
 }
 
 fn calc_boundary_operators(c: SimplicalComplex) -> (IM, IM, IM, IM){
-    let d0 = IM::zeros(1, c.verts.len());
-    let d3 = IM::from_element(0, 0, 0);
-    let d1 = calc_ith_boundary(&c.verts, &c.edges);
-    let d2 = calc_ith_boundary(&c.edges, &c.faces);
-    (d0, d1, d2, d3)
+    let m0 = IM::zeros(1, c.verts.len());
+    let m3 = IM::from_element(0, 0, 0);
+    let m1 = calc_boundary_operator(&c.verts, &c.edges);
+    let m2 = calc_boundary_operator(&c.edges, &c.faces);
+    (m0, m1, m2, m3)
 }
 
-fn col_r(mm: IM) -> IM {
-    let mut m = mm.clone(); 
-    if m.is_empty() { return m; }
+fn col_rmv(m: &mut IM) {
     let nc = m.ncols();
     for j1 in 0..nc {
-        let i = np_map(&m.transpose())[j1];
+        let i = col_nonzero(&m.transpose())[j1];
         for j2 in 0..nc {
             if j2 == j1 { continue; }
             let c = sign(m[(i, j2)]) * (m[(i, j2)].abs() / m[(i, j1)]);
             m.set_column(j2, &(m.column(j2) - m.column(j1) * c));
         }
     }
-    m
 }
 
-fn col_r_same_tor(mm: IM, tt: TM) -> (IM, TM){
-    let mut m = mm.clone(); 
-    let mut t = tt.clone();
-    if m.is_empty() { return (m, t); }
+fn col_rmv_same_tor(m: &mut IM, t: &mut TM){
     let nc = m.ncols();
     for j1 in 0..nc {
-        let i = np_map(&m.transpose())[j1];
+        let i = col_nonzero(&m.transpose())[j1];
         for j2 in 0..nc {
             let g = gcd(t[j1], t[j2]);
             let f = (t[j2] > t[j1]) || (t[j1] > 1 && t[j2] > 1 && g == 1);
             if j2 == j1 || f { continue; }
             let c = sign(m[(i, j2)]) * (m[(i, j2)].abs() / m[(i, j1)]);
             m.set_column(j2, &(m.column(j2) - m.column(j1) * c));
-            t[(j2, 0)] = g;
+            t[j2] = g;
         }
     }
-    (m, t)
 }
 
-fn calc_cohomology(d: IM) -> (IM, TM, IM) {
-    let r = d.clone().cast::<f64>().rank(1e-8);
-    let o = smith_normalize(&d.cast::<i128>());
-    let u = o.p.cast::<f64>().try_inverse().unwrap();
-    let z = o.q.slice((0, r), (o.q.nrows(), o.q.ncols() - r)).clone();
-    let t = o.b.slice((0, 0), (r, r)).clone().diagonal().clone();
-    let b = u.slice((0, 0), (u.nrows(), r)).clone_owned();
-    let zz = col_r(z.into_owned());
-    let (bb, tt) = col_r_same_tor(cast_f2i(b), t);
-    (bb, tt, zz)
+fn calc_cohomology(m: IM) -> (IM, TM, IM) {
+    let s = smith_normalize(&m);
+    let u = s.p.cast::<f64>().try_inverse().unwrap();
+    let n = m.cast::<f64>().rank(1e-8);
+    let (r, c) = s.q.shape();
+    let mut z = s.q.slice((0, n), (r, c - n)).into_owned();
+    let mut t = s.b.slice((0, 0), (n, n)).diagonal();
+    let mut b = cast_f2i(u.slice((0, 0), (u.nrows(), n)));
+    if !z.is_empty() { col_rmv(&mut z); } 
+    if !b.is_empty() { col_rmv_same_tor(&mut b, &mut t); }
+    (b, t, z)
 }
 
-fn calc_ith_homology(d1: IM, d2: IM) -> (IM, Vec<i128>){
-    let mut z1 = IM::identity(d1.ncols(), d1.ncols());
-    let mut b1 = IM::zeros(1, 1);
-    let mut t1 = TM::from_row_slice(&[]);
+fn calc_homology(d1: IM, d2: IM) -> (IM, Vec<i128>){
+    let iszeros = |m: &DMatrix<i128>| m.iter().all(|v| *v == 0);
 
-    if !is_zeros(&d1) {
-        let set = calc_cohomology(d1);
-        z1 = set.2;
-    }
-
-    if d2.is_empty() {
-        b1 = IM::from_element(0, 0, 0);
+    let z1 = if !iszeros(&d1) {
+        calc_cohomology(d1).2
     } else {
-        let set = calc_cohomology(d2);
-        b1 = set.0;
-        t1 = set.1;
-    }
+        IM::identity(d1.ncols(), d1.ncols())
+    };
 
-    let z_nonzero = np_map(&z1.transpose());
-    let b_nonzero = np_map(&b1.transpose()); 
+    let (b1, t1) = if d2.is_empty() {
+        (IM::from_element(0, 0, 0), TM::from_row_slice(&[]))
+    } else {
+        let o = calc_cohomology(d2);
+        (o.0, o.1)
+    };
+
+    let z_nonzero = col_nonzero(&z1.transpose());
+    let b_nonzero = col_nonzero(&b1.transpose()); 
     let mut non_trivial = vec![];
 
     for (i, z) in z_nonzero.iter().enumerate() { 
-        if !b_nonzero.contains(z) {
-            non_trivial.push((i, 1));
-        }
+        if !b_nonzero.contains(z) { non_trivial.push((i, 1)); }
     }
 
     for (i, b) in b_nonzero.iter().enumerate() { 
-        if t1[(i, 0)] > 1 {
-            let mut basis = 0;
-            for (j, z) in z_nonzero.iter().enumerate() { if z == b { basis = j;break; } }
-            non_trivial.push((basis, t1[(i, 0)]));
+        if t1[i] > 1 {
+            let n = z_nonzero.iter().position(|z| z == b).unwrap();
+            non_trivial.push((n, t1[i]));
         }
     }
 
-    let mut zz = IM::zeros(z1.nrows(), non_trivial.len());
-    let mut tt = vec![];
+    let mut z = IM::zeros(z1.nrows(), non_trivial.len());
+    let mut t = vec![];
     for (i, x) in non_trivial.iter().enumerate() {
-        zz.set_column(i, &z1.column(x.0));
-        tt.push(x.1);
+        z.set_column(i, &z1.column(x.0));
+        t.push(x.1);
     };
 
     println!("-----");
-    println!("zz: {}", zz);
+    println!("zz: {}", z);
     print!("k: ");
-    for k in tt.clone() { print!("{}, ", k); }
+    for k in t.clone() { print!("{}, ", k); }
     println!("");
     println!("-----");
 
-    (zz, tt)
+    (z, t)
 }
 
-pub fn calc_homology_group_list(sc: SimplicalComplex) -> Vec<(IM, Vec<i128>)>{
+pub fn calc_homology_groups(sc: SimplicalComplex) -> Vec<(IM, Vec<i128>)>{
     let (d0, d1, d2, d3) = calc_boundary_operators(sc);
     let mut g = vec![];
-    g.push(calc_ith_homology(d0.clone(), d1.clone()));
-    g.push(calc_ith_homology(d1.clone(), d2.clone()));
-    g.push(calc_ith_homology(d2.clone(), d3.clone()));
+    g.push(calc_homology(d0.clone(), d1.clone()));
+    g.push(calc_homology(d1.clone(), d2.clone()));
+    g.push(calc_homology(d2.clone(), d3.clone()));
     g
 }
 
 #[test]
-fn test_2() {
+fn test_simplex() {
     let sc = SimplicalComplex{
         verts: vec![vec![0], vec![1], vec![2], vec![3]],
         edges: vec![vec![0, 1], vec![0, 2], vec![0, 3], vec![1, 2], vec![1, 3], vec![2, 3]],
         faces: vec![vec![0, 1, 2], vec![0, 1, 3], vec![0, 2, 3], vec![1, 2, 3]],
     };
-    let rs = calc_homology_group_list(sc);
+    let rs = calc_homology_groups(sc);
 }
 
 #[test]
-fn test_3() {
+fn test_torus() {
     let sc = SimplicalComplex{
         verts: vec![
             vec![0],
@@ -240,11 +230,11 @@ fn test_3() {
             vec![0, 3, 2]
         ],
     };
-    calc_homology_group_list(sc);
+    calc_homology_groups(sc);
 }
 
 #[test]
-fn test_4() {
+fn test_klein() {
     let sc = SimplicalComplex{
         verts: vec![
             vec![0],
@@ -307,43 +297,31 @@ fn test_4() {
             vec![0, 3, 2]
         ],
     };
-    calc_homology_group_list(sc);
+    calc_homology_groups(sc);
 }
 
-fn is_zeros(m: &IM) -> bool {
+fn col_nonzero(m: &IM) -> Vec<usize> {
     let (nr, nc) = m.shape();
-    for j in 0..nc {
-        for i in 0..nr {
-            let e = unsafe { m.get_unchecked((i, j)) };
-            if *e != 0 {
-                return false;
-            }
-        }
-    }
-    true
-}
-
-fn np_map(d: &IM) -> Vec<usize> {
     let mut v = vec![];
-    for i in 0..d.nrows() {
-    for j in 0..d.ncols() {
-        if d[(i, j)] != 0 { v.push(j); break; }
+
+    for i in 0..nr {
+    for j in 0..nc {
+        if m[(i, j)] != 0 { v.push(j); break; }
     }
     }
     v
 }
 
-fn cast_f2i(d: DMatrix<f64>) -> IM {
+fn cast_f2i(d: DMatrixSlice<f64>) -> IM {
     let mut m = DMatrix::<i128>::zeros(d.nrows(), d.ncols());
     for i in 0..d.nrows() {
-        for j in 0..d.ncols() {
-            m[(i, j)] = d[(i, j)].round() as i128;
-        }
+    for j in 0..d.ncols() {
+        m[(i, j)] = d[(i, j)].round() as i128;
+    }
     }
     m
 }
 
 fn sign(i:i128)-> i128 {
-    if i == 0 { return 0; }
-    else { return i / i.abs(); }
+    if i == 0 { 0 } else { i / i.abs() }
 }
