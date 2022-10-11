@@ -121,10 +121,23 @@ fn calc_ith_homology(d1: DMatrix<isize>, d2: DMatrix<isize>) -> DMatrix<isize>{
     }
     let z_nonzero = np_map(&z1.transpose());
     let b_nonzero = np_map(&b1.transpose()); 
+    let mut non_trivial = vec![];
     println!("z1: {}", z1);
     println!("b1: {}", b1);
-    for v in z_nonzero { println!("znonzero: {}", v); }
-    for v in b_nonzero { println!("bnonzero: {}", v); }
+    //for v in z_nonzero { println!("znonzero: {}", v); }
+    //for v in b_nonzero { println!("bnonzero: {}", v); }
+
+    for (i, z) in z_nonzero.iter().enumerate() { 
+        if !b_nonzero.contains(z) {
+            non_trivial.push((i, 1));
+        }
+    }
+
+    for (i, b) in b_nonzero.iter().enumerate() { 
+        if t1[i] > 1 {
+            non_trivial.push((i, 1));
+        }
+    }
     DMatrix::<isize>::zeros(1, 1)
 }
 
