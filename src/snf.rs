@@ -2,12 +2,13 @@
 // smith normal form with nalgebra
 //
 
-use nalgebra::{DMatrix, DMatrixSlice};
+use nalgebra::{DMatrix, DMatrixSlice, OMatrix, Dynamic};
+type IM = OMatrix<i128, Dynamic, Dynamic>;
 
 pub struct Decomposed {
-    pub p: DMatrix<i128>,
-    pub q: DMatrix<i128>,
-    pub b: DMatrix<i128>,
+    pub p: IM,
+    pub q: IM,
+    pub b: IM,
 }
 
 fn iamin_full(m: DMatrixSlice<i128>) -> (usize, usize) {
@@ -52,7 +53,7 @@ fn is_mod_zeros(m: DMatrixSlice<i128>, v: i128) -> bool {
     true
 }
 
-fn eij(i: usize, j: usize, n: usize) -> DMatrix<i128> {
+fn eij(i: usize, j: usize, n: usize) -> IM {
     let mut m = DMatrix::identity(n, n);
     m[(i, i)] = 0;
     m[(j, j)] = 0;
@@ -61,22 +62,22 @@ fn eij(i: usize, j: usize, n: usize) -> DMatrix<i128> {
     m
 }
 
-fn ei(i: usize, n: usize) -> DMatrix<i128> {
+fn ei(i: usize, n: usize) -> IM {
     let mut m = DMatrix::identity(n, n);
     m[(i, i)] = -1;
     m
 }
 
-fn ec(i: usize, j: usize, c: i128, n: usize) -> DMatrix<i128> {
+fn ec(i: usize, j: usize, c: i128, n: usize) -> IM {
     let mut m = DMatrix::identity(n, n);
     m[(i, j)] = c;
     m
 }
 
-fn row_null(a: &DMatrix<i128>, k: usize) -> Decomposed {
+fn row_null(a: &IM, k: usize) -> Decomposed {
     let mut b = a.clone();
-    let mut p = DMatrix::<i128>::identity(a.nrows(), a.nrows());
-    let q = DMatrix::<i128>::identity(a.ncols(), a.ncols());
+    let mut p = IM::identity(a.nrows(), a.nrows());
+    let q = IM::identity(a.ncols(), a.ncols());
     for i in k + 1..a.nrows() {
         let d = a[(i, k)] / a[(k, k)];
         let e = ec(i, k, -d, a.nrows());
@@ -86,10 +87,10 @@ fn row_null(a: &DMatrix<i128>, k: usize) -> Decomposed {
     Decomposed { p: p, q: q, b: b }
 }
 
-fn col_null(a: &DMatrix<i128>, k: usize) -> Decomposed {
+fn col_null(a: &IM, k: usize) -> Decomposed {
     let mut b = a.clone();
-    let mut q = DMatrix::<i128>::identity(a.ncols(), a.ncols());
-    let p = DMatrix::<i128>::identity(a.nrows(), a.nrows());
+    let mut q = IM::identity(a.ncols(), a.ncols());
+    let p = IM::identity(a.nrows(), a.nrows());
     for j in k + 1..a.ncols() {
         let d = a[(k, j)] / a[(k, k)];
         let e = ec(k, j, -d, a.ncols());
@@ -114,7 +115,7 @@ fn mod_full(m: DMatrixSlice<i128>, val: i128) -> (usize, usize) {
     idx
 }
 
-fn swap_min(a: &DMatrix<i128>, k: usize) -> Decomposed {
+fn swap_min(a: &IM, k: usize) -> Decomposed {
     let s = a.slice((k, k), (a.nrows() - k, a.ncols() - k));
     let m = iamin_full(s);
     let (i, j) = (m.0 + k, m.1 + k);
@@ -130,10 +131,10 @@ fn swap_min(a: &DMatrix<i128>, k: usize) -> Decomposed {
 }
 
 
-fn remn_mod(a: &DMatrix<i128>, k: usize) -> Decomposed {
+fn remn_mod(a: &IM, k: usize) -> Decomposed {
     let (nr, nc) = a.shape();
-    let mut p = DMatrix::<i128>::identity(nr, nr);
-    let mut q = DMatrix::<i128>::identity(nc, nc);
+    let mut p = IM::identity(nr, nr);
+    let mut q = IM::identity(nc, nc);
     let idx = mod_full(a.slice((k + 1, k + 1), (nr - k - 1, nc - k - 1)), a[(k, k)]);
     let (i, j) = (idx.0 + k + 1, idx.1 + k + 1);
     let d = a[(i, j)] / a[(k, k)];
@@ -145,11 +146,11 @@ fn remn_mod(a: &DMatrix<i128>, k: usize) -> Decomposed {
     Decomposed { p: p, q: q, b: b }
 }
 
-pub fn smith_normalize(a: &DMatrix<i128>) -> Decomposed {
+pub fn smith_normalize(a: &IM) -> Decomposed {
     let (nr, nc) = a.shape();
     let mut b = a.clone();
-    let mut p = DMatrix::<i128>::identity(nr, nr);
-    let mut q = DMatrix::<i128>::identity(nc, nc);
+    let mut p = IM::identity(nr, nr);
+    let mut q = IM::identity(nc, nc);
     for k in 0..if nr < nc { nr } else { nc } {
         if is_zeros(b.slice((k, k), (nr - k, nc - k))) {
             break;
